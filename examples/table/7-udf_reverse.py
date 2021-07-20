@@ -3,12 +3,20 @@ from pyflink.table.descriptors import Schema, OldCsv, FileSystem
 from pyflink.table.expressions import col
 from pyflink.table.udf import udf, ScalarFunction
 
-reverse_string = udf(lambda w: w[::-1], [DataTypes.STRING()], DataTypes.STRING())
+# Encapsulate UDF within its own class
+class ReverseString(ScalarFunction):
+  def eval(self, string):
+    return string[::-1]
 
+# Register UDF
+reverse = udf(ReverseString(), result_type=DataTypes.STRING())
+
+# Configure table environment
 settings = EnvironmentSettings.new_instance().in_batch_mode().use_blink_planner().build()
 t_env = TableEnvironment.create(settings)
 t_env.get_config().get_configuration().set_string("parallelism.default", "1")
 
+# Create source and sink
 t_env.execute_sql("""
         CREATE TABLE mySource (
           word STRING
@@ -30,9 +38,10 @@ t_env.execute_sql("""
         )
     """)
 
+# Define and execute a query operation that uses the `reverse` UDF
 t_env.from_path('mySource') \
     .group_by(col('word')) \
-    .select(reverse_string(col('word')), col('word').count) \
+    .select(reverse(col('word')), col('word').count) \
     .insert_into('mySink') \
 
 t_env.execute("7-udf_reverse")
